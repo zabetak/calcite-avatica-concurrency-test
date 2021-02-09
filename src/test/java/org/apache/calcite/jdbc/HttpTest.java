@@ -1,12 +1,8 @@
 package org.apache.calcite.jdbc;
 
-import java.io.PrintStream;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
-import java.util.Arrays;
 import java.util.Properties;
 import java.util.stream.IntStream;
 
@@ -57,20 +53,10 @@ public class HttpTest {
     @Test
     public void testConcurrenClients() throws Exception {
         System.err.println("=== Test Run ===");
-
         IntStream.range(0, 20).parallel().forEach(idx -> {
-            try {
-                AvaticaTestClient testClient = new AvaticaTestClient("http://localhost:" + port);
-                Connection conn = testClient.getConnection();
-
+            AvaticaTestClient testClient = new AvaticaTestClient("http://localhost:" + port);
+            try (Connection conn = testClient.getConnection()){
                 conn.getMetaData().getTables(null, null, null, null);
-                for (String table : Arrays.asList("DEPTS", "EMPS", "SDEPTS")) {
-                    conn.createStatement().executeQuery("select * from " + table);
-                }
-
-                conn.close();
-
-                System.err.print("*");
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -90,7 +76,6 @@ public class HttpTest {
         try {
             connection = DriverManager.getConnection("jdbc:calcite:", info);
             System.err.println("=== Server Setup ===");
-            output(connection.getMetaData().getTables(connection.getCatalog(), null, null, null));
             return new LocalService(new CalciteMetaImpl((CalciteConnectionImpl) connection));
         } catch (Exception e) {
             if (connection != null) {
@@ -101,24 +86,6 @@ public class HttpTest {
                 }
             }
             throw new RuntimeException(e);
-        }
-    }
-
-    private void output(ResultSet resultSet) throws SQLException {
-        PrintStream out = System.out;
-
-        final ResultSetMetaData metaData = resultSet.getMetaData();
-        final int columnCount = metaData.getColumnCount();
-        while (resultSet.next()) {
-            for (int i = 1;; i++) {
-                out.print(resultSet.getString(i));
-                if (i < columnCount) {
-                    out.print(", ");
-                } else {
-                    out.println();
-                    break;
-                }
-            }
         }
     }
 
@@ -138,11 +105,7 @@ public class HttpTest {
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
-
-            Serialization serialization = Serialization.JSON;
-
-            jdbcUrl = "jdbc:avatica:remote:url=" + serverUrl
-                    + ";serialization=" + serialization.name().toLowerCase();
+            jdbcUrl = "jdbc:avatica:remote:url=" + serverUrl + ";serialization=json";
         }
 
         public Connection getConnection() throws SQLException {
