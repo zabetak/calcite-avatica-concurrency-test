@@ -2,10 +2,12 @@ package org.apache.calcite.jdbc;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 import java.util.stream.IntStream;
 
+import org.apache.calcite.avatica.jdbc.JdbcMeta;
 import org.apache.calcite.avatica.remote.Driver.Serialization;
 import org.apache.calcite.avatica.remote.LocalService;
 import org.apache.calcite.avatica.remote.Service;
@@ -53,10 +55,16 @@ public class HttpTest {
     @Test
     public void testConcurrenClients() throws Exception {
         System.err.println("=== Test Run ===");
-        IntStream.range(0, 20).parallel().forEach(idx -> {
+        IntStream.range(0, 100).parallel().forEach(idx -> {
             AvaticaTestClient testClient = new AvaticaTestClient("http://localhost:" + port);
             try (Connection conn = testClient.getConnection()){
-                conn.getMetaData().getTables(null, null, null, null);
+                try (ResultSet r = conn.getMetaData().getTables(null, null, null, null)) {
+                    while (r.next()) {
+                        String schema = r.getString(2);
+                        String tblName = r.getString(3);
+                        System.out.println(Thread.currentThread().getName() + ":" + schema + "." + tblName);
+                    }
+                }
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -71,21 +79,10 @@ public class HttpTest {
     private Service getLocalService() {
         Properties info = new Properties();
         info.put("model", jsonPath("model"));
-
-        Connection connection = null;
         try {
-            connection = DriverManager.getConnection("jdbc:calcite:", info);
-            System.err.println("=== Server Setup ===");
-            return new LocalService(new CalciteMetaImpl((CalciteConnectionImpl) connection));
-        } catch (Exception e) {
-            if (connection != null) {
-                try {
-                    connection.close();
-                } catch (SQLException e1) {
-                    throw new RuntimeException(e1);
-                }
-            }
-            throw new RuntimeException(e);
+            return new LocalService(new JdbcMeta("jdbc:calcite:", info));
+        } catch (SQLException throwables) {
+            throw new RuntimeException(throwables);
         }
     }
 
